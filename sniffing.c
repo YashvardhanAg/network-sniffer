@@ -6,6 +6,7 @@
 #include <net/if.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
+#include <netinet/if_ether.h>
 #include <netinet/udp.h>
 #include <netinet/ip6.h>
 #include <linux/if_packet.h>
@@ -168,6 +169,35 @@ void ip6Retriever(int sock_fd, char *buffer, ssize_t len, size_t *offset)
     portRetriever6(buffer, len, ipaddr, offset);
 }
 
+void ARPRetriever(char *buffer, ssize_t len, size_t *offset)
+{
+    if ((size_t)len < *offset + sizeof(struct ether_arp))
+    {
+        return;
+    }
+    struct ether_arp *arp = (struct ether_arp *)(buffer + *offset);
+    uint16_t code = ntohs(arp->ea_hdr.ar_op);
+    char source_ip[INET_ADDRSTRLEN];
+    char dest_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, arp->arp_spa, source_ip, sizeof(source_ip));
+    inet_ntop(AF_INET, arp->arp_tpa, dest_ip, sizeof(dest_ip));
+    printf("\t[ARP Header] \n");
+    switch (code)
+    {
+    case ARPOP_REQUEST:
+        printf("\t\t(ARP Request: Who has %s? Tell %s)\n", dest_ip, source_ip);
+        break;
+    case ARPOP_REPLY:
+        printf("\t\t(ARP Reply: %s is at ", source_ip);
+        printMac(arp->arp_sha);
+        printf("\n");
+        break;
+    default:
+        printf("\t\t(Opcode %u)\n", code);
+        break;
+    }
+}
+
 void MacRetriever(int sock_fd, char *buffer)
 {
     ssize_t len = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, NULL, NULL);
@@ -191,7 +221,7 @@ void MacRetriever(int sock_fd, char *buffer)
     }
     else if (proto == ETH_P_ARP)
     {
-        printf(" [ARP Header] : (0x:%04X) \n", proto);
+        ARPRetriever(buffer, len, &offset);
     }
     else if (proto == ETH_P_IPV6)
     {
