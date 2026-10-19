@@ -3,13 +3,14 @@ C Raw Socket Network Sniffer
 A modular, low-level packet capture and protocol analysis tool written in C for Linux systems using raw packet sockets (AF_PACKET, SOCK_RAW).
 
 This project explores network communication from Layer 2 up to the Application Layer payload, implemented through both focused standalone inspection scripts (which exhaustively dump structure fields) and a unified sniffer pipeline.
+
 Architecture & Project Structure
 
 The project is structured into two tracks:
 
     Standalone Deep-Dive Parsers: Dedicated scripts designed to inspect every available struct member and bitwise parameter possible in each protocol header.
 
-    Integrated Engine (sniffing.c): A unified, high-performance packet processing pipeline that handles end-to-end decapsulation, dynamic offset navigation (including IPv6 extension headers), and payload extraction.
+    Integrated Engine (sniffing.c): A unified, high-performance packet processing pipeline that handles end-to-end decapsulation, dynamic offset navigation (including ARP and IPv6 extension headers), and payload extraction.
 
 
 Script Overview & Parameter Coverage
@@ -87,7 +88,7 @@ Iterates over payload bounds with isprint() guards to display readable ASCII cha
 5. sniffing.c (Integrated Sniffer)
 
 The combined master program. It sets up the raw interface socket, enforces promiscuous reception via PACKET_MR_PROMISC, checks frame sizes against runts, and cascades parsing dynamically:
-Ethernet /IPv6⟶TCP / UDP /Payload
+Ethernet / ARP / IPv6 ⟶ TCP / UDP /Payload
 
 Prerequisites:
 
