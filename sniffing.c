@@ -14,9 +14,19 @@
 #include <linux/if_vlan.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
+#include <signal.h>
 
 #define BUFFER_SIZE 65536
 #define LISTENER "wlo1"
+
+static volatile int keep_running = 1;
+
+void handle_signal(int signal)
+{
+    (void)signal;
+    keep_running = 0;
+}
 
 void printMac(const unsigned char *mac)
 {
@@ -198,12 +208,25 @@ void ARPRetriever(char *buffer, ssize_t len, size_t *offset)
     }
 }
 
-void MacRetriever(int sock_fd, char *buffer)
+int MacRetriever(int sock_fd, char *buffer)
 {
     ssize_t len = recvfrom(sock_fd, buffer, BUFFER_SIZE, 0, NULL, NULL);
+    if (len < 0)
+    {
+        if (errno == EINTR)
+        {
+            return -1;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            return 0;
+        }
+        perror("recvfrom failed");
+        return -1;
+    }
     if (len < (ssize_t)sizeof(struct ethhdr))
     {
-        return;
+        return 0;
     }
     size_t offset = sizeof(struct ethhdr);
     struct ethhdr *eth = (struct ethhdr *)buffer;
@@ -231,10 +254,20 @@ void MacRetriever(int sock_fd, char *buffer)
     {
         printf(" [Other] : (0x:%04X) \n", proto);
     }
+    return 0;
 }
 
 int main()
 {
+    struct sigaction sa;
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGINT, &sa, NULL) < 0)
+    {
+        perror("sigaction failed");
+        return EXIT_FAILURE;
+    }
     int sock_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock_fd < 0)
     {
@@ -274,9 +307,14 @@ int main()
     unsigned char buffer[BUFFER_SIZE];
     while (1)
     {
-        MacRetriever(sock_fd, buffer);
+        if (MacRetriever(sock_fd, buffer) < 0)
+        {
+            break;
+        }
         printf("\n");
     }
+    printf("Exiting...\n");
+    setsockopt(sock_fd, SOL_PACKET, PACKET_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
     close(sock_fd);
     return EXIT_SUCCESS;
 }
